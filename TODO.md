@@ -1,22 +1,39 @@
 
-Добавить compose.yaml (docker compose)
-- должен запускать postgres в контейнере (почитать что такое docker и контейнеры) 
-- когда заработает postgres в контейнере (можно будет подрубится через pgadmin по 0.0.0.0:5432) добавить Dockerfile с сборкой сервиса и запуском в контейнере
+Запилить DELETE aviation делай его сам по аналогии с другими ручками (без гпт пж)
 
-### ./compose.yaml
-```yaml
-services:
-  postgres:
-    image: postgres:14.10-alpine
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_HOST_AUTH_METHOD: trust
-    volumes:
-      - pgdata:/var/lib/postgresql/data  
+Логировать ошибки log.Error(err) чтоб мы понимали что пошло не так (высвечивается в терминале)
 
-volumes:
-  pgdata:
+Сделать так чтобы сервис запускался в контейнере
+В docker-compose.yaml
+```golang
+api-gateway:
+    build: ./
+    ports:
+      - "8080:8080"  
+    depends_on:
+      postgres:
+        condition: service_started
 ```
+        
+добавить ./Dockerfile
 
-поставить docker + docker hub
+```dockerfile
+FROM golang:1.23-alpine AS builder
+
+WORKDIR /
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+
+RUN go build -o /app/api-gateway ./
+RUN ls -l /app
+
+FROM alpine:latest 
+
+WORKDIR /app
+COPY --from=builder /app/api-gateway .
+
+ENTRYPOINT ["./api-gateway"]
+```
