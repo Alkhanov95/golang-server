@@ -5,8 +5,11 @@ import (
 	"log"      // Для логирования ошибок и сообщений.
 	"net/http" // Для работы с HTTP-сервером.
 
+	"log/slog" // Используем для логирования
+
 	"github.com/gin-gonic/gin" // Фреймворк для создания веб-приложений.
 	"github.com/jackc/pgx/v5"  // Библиотека для работы с PostgreSQL.
+	"github.com/pkg/errors"    // Используем для обёртывания ошибок
 )
 
 type Aviation struct {
@@ -26,12 +29,14 @@ func main() {
 	// Устанавливаем соединение с базой данных.
 	conn, err = pgx.Connect(context.Background(), connStr)
 	if err != nil {
-		log.Fatalf("Ошибка подключения к базе данных: %v\n", err)
+		//логируем ошибку подключения
+		slog.Error("Ошибка при подключении к бд", "error", errors.Wrap(err, "ошибка при установление бд PGX connect"))
+		return
 	}
 	defer func() {
 		// Закрытие соединения при завершении работы.
 		if err := conn.Close(context.Background()); err != nil {
-			log.Printf("Ошибка при закрытии соединения с базой данных: %v\n", err)
+			slog.Error("Ошибка при закрытие соеденения", "error", errors.Wrap(err, "closing connection db error (conn.close) "))
 		}
 	}()
 
@@ -53,7 +58,7 @@ func getAllAviation(c *gin.Context) {
 	query := "SELECT id, title, plane, price FROM aviation"
 	rows, err := conn.Query(context.Background(), query)
 	if err != nil {
-		log.Printf("Ошибка при получении данных: %v\n", err)
+		slog.Error("Ошибка при получении данных", "error", errors.Wrap(err, " function getAllAviation query?"))
 		c.IndentedJSON(http.StatusInternalServerError, gin.H{"message": "Ошибка получения данных"})
 		return
 	}
@@ -63,7 +68,7 @@ func getAllAviation(c *gin.Context) {
 	for rows.Next() {
 		var aviation Aviation
 		if err := rows.Scan(&aviation.ID, &aviation.Title, &aviation.Plane, &aviation.Price); err != nil {
-			log.Printf("Ошибка при обработке данных: %v\n", err)
+			slog.Error("Ошибка при обработки данных", "error", errors.Wrap(err, "rows scan, тип данных"))
 			c.IndentedJSON(http.StatusInternalServerError, gin.H{"message": "Ошибка обработки данных"})
 			return
 		}
@@ -97,15 +102,14 @@ func getAviationByID(c *gin.Context) {
 // postAviation добавляет новую запись.
 func postAviation(c *gin.Context) {
 	var newAviation Aviation
-
 	if err := c.BindJSON(&newAviation); err != nil {
-		log.Printf("Ошибка при разборе данных: %v\n", err)
+		slog.Error("Ошибка при разборе данных", "error", errors.Wrap(err, "postaviation error with binJSON"))
 		c.IndentedJSON(http.StatusBadRequest, gin.H{"message": "Неверные входные данные"})
 		return
 	}
 
 	if newAviation.Price <= 0 {
-		log.Println("Некорректная цена при добавлении записи")
+		slog.Error("Некорректная цена при добавлении записи")
 		c.IndentedJSON(http.StatusBadRequest, gin.H{"message": "Некорректная цена"})
 		return
 	}
@@ -113,7 +117,7 @@ func postAviation(c *gin.Context) {
 	query := "INSERT INTO aviation (title, plane, price) VALUES ($1, $2, $3)"
 	_, err := conn.Exec(context.Background(), query, newAviation.Title, newAviation.Plane, newAviation.Price)
 	if err != nil {
-		log.Printf("Ошибка при добавлении записи: %v\n", err)
+		slog.Error("Ошибка при добавлении записи", "error", errors.Wrap(err, "query insert"))
 		c.IndentedJSON(http.StatusInternalServerError, gin.H{"message": "Ошибка добавления записи"})
 		return
 	}
@@ -128,7 +132,7 @@ func deleteAviationByID(c *gin.Context) {
 
 	commandTag, err := conn.Exec(context.Background(), query, id)
 	if err != nil {
-		log.Printf("Ошибка при удалении записи с ID %s: %v\n", id, err)
+		slog.Error("error while deleting data", "error", errors.Wrap(err, "func delete aviation query"))
 		c.IndentedJSON(http.StatusInternalServerError, gin.H{"message": "Ошибка удаления записи"})
 		return
 	}
@@ -150,7 +154,7 @@ func putAviation(c *gin.Context) {
 
 	// Считываем данные для обновления из тела запроса.
 	if err := c.BindJSON(&updatedAviation); err != nil {
-		log.Printf("Ошибка при разборе данных для обновления записи с ID %s: %v\n", id, err)
+		slog.Error("Ошибка при разборе данных для обновления записи с ID", "error", errors.Wrap(err, "updated aviation binjson"))
 		c.IndentedJSON(http.StatusBadRequest, gin.H{"message": "Неверные входные данные"})
 		return
 	}
@@ -166,7 +170,7 @@ func putAviation(c *gin.Context) {
 	query := "UPDATE aviation SET title = $1, plane = $2, price = $3 WHERE id = $4"
 	cmdTag, err := conn.Exec(context.Background(), query, updatedAviation.Title, updatedAviation.Plane, updatedAviation.Price, id)
 	if err != nil {
-		log.Printf("Ошибка при обновлении записи с ID %s: %v\n", id, err)
+		slog.Error("Ошибка при обновлении записи с ID", "error", errors.Wrap(err, "query for update aviation"))
 		c.IndentedJSON(http.StatusInternalServerError, gin.H{"message": "Ошибка обновления записи"})
 		return
 	}
