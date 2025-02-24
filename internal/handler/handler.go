@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"aviation/my-api/internal/usecase"
 	"context"
 	"log"
 	"log/slog"
@@ -27,10 +28,6 @@ type Flights struct {
 	Arrival       string `json:"arrival"`        // Аэропорт прилёта
 }
 
-type Handle struct {
-	conn *pgx.Conn
-}
-
 type PlaneID struct {
 	ID            uint64  `json:"id"`    // Уникальный идентификатор самолёта (целое число, внешний ключ на flights.id)
 	Title         string  `json:"title"` // Название авиакомпании или самолёта
@@ -42,9 +39,17 @@ type PlaneID struct {
 	Arrival       string  `json:"arrival"`        // Аэропорт прилёта
 }
 
-func New(conn *pgx.Conn) *Handle {
+type Handle struct {
+	conn *pgx.Conn
+
+	aviationUC *usecase.AviationUsecase
+}
+
+func New(conn *pgx.Conn, aviationUC *usecase.AviationUsecase) *Handle {
 	handle := Handle{
 		conn: conn,
+
+		aviationUC: aviationUC,
 	}
 
 	return &handle
@@ -52,7 +57,7 @@ func New(conn *pgx.Conn) *Handle {
 
 // postAviation добавляет новую запись.
 func (h *Handle) PostAviation(c *gin.Context) {
-	var newAviation Aviation
+	var newAviation usecase.Aviation
 	if err := c.BindJSON(&newAviation); err != nil {
 		slog.Error("Ошибка при разборе данных", "error", errors.Wrap(err, "postaviation error with binJSON"))
 		c.IndentedJSON(http.StatusBadRequest, gin.H{"message": "Неверные входные данные"})
@@ -65,12 +70,9 @@ func (h *Handle) PostAviation(c *gin.Context) {
 		return
 	}
 
-	query := "INSERT INTO aviation (title, plane, price) VALUES ($1, $2, $3)"
-	_, err := h.conn.Exec(context.Background(), query, newAviation.Title, newAviation.Plane, newAviation.Price)
-	if err != nil {
-		slog.Error("Ошибка при добавлении записи", "error", errors.Wrap(err, "query insert"))
+	if err := h.aviationUC.CreateAviation(c, newAviation); err != nil {
+		slog.Error("Ошибка при добавлении записи", "error", errors.Wrap(err, "postaviation error with createaviation"))
 		c.IndentedJSON(http.StatusInternalServerError, gin.H{"message": "Ошибка добавления записи"})
-		return
 	}
 
 	c.IndentedJSON(http.StatusCreated, newAviation)
@@ -78,27 +80,13 @@ func (h *Handle) PostAviation(c *gin.Context) {
 
 // getAllAviation возвращает список всех записей из таблицы aviation.
 func (h *Handle) GetAllAviation(c *gin.Context) {
-	query := "SELECT id, title, plane, price FROM aviation"
-	rows, err := h.conn.Query(context.Background(), query)
+	list, err := h.aviationUC.GetAllAviation(c)
 	if err != nil {
-		slog.Error("Ошибка при получении данных", "error", errors.Wrap(err, " function getAllAviation query?"))
-		c.IndentedJSON(http.StatusInternalServerError, gin.H{"message": "Ошибка получения данных"})
+		slog.Error("Ошибка при получении всех записей", "error", errors.Wrap(err, "getallaviation error"))
+		c.IndentedJSON(http.StatusInternalServerError, gin.H{"message": "Ошибка получения записей"})
 		return
 	}
-	defer rows.Close()
-
-	var aviationData []Aviation
-	for rows.Next() {
-		var aviation Aviation
-		if err := rows.Scan(&aviation.ID, &aviation.Title, &aviation.Plane, &aviation.Price); err != nil {
-			slog.Error("Ошибка при обработки данных", "error", errors.Wrap(err, "rows scan, тип данных"))
-			c.IndentedJSON(http.StatusInternalServerError, gin.H{"message": "Ошибка обработки данных"})
-			return
-		}
-		aviationData = append(aviationData, aviation)
-	}
-
-	c.IndentedJSON(http.StatusOK, aviationData)
+	c.IndentedJSON(http.StatusOK, list)
 }
 
 // getAviationByID возвращает запись по ID.

@@ -2,6 +2,7 @@ package main
 
 import (
 	"aviation/my-api/internal/handler"
+	"aviation/my-api/internal/usecase"
 	"context" // Для управления контекстом выполнения.
 	"log"     // Для логирования ошибок и сообщений.
 
@@ -41,7 +42,8 @@ func main() {
 			slog.Error("Ошибка при закрытие соеденения", "error", errors.Wrap(err, "closing connection db error (conn.close) "))
 		}
 	}()
-	handle := handler.New(conn)
+	aviationUC := usecase.New(conn)
+	handle := handler.New(conn, aviationUC)
 	router := getRouter(handle)
 	// Запуск HTTP-сервера.
 	log.Println("Запуск сервера на порту 8080...")
