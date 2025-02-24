@@ -55,6 +55,8 @@ func getRouter(handle *handler.Handle) *gin.Engine {
 	router.POST("/aviation", handle.PostAviation)
 	router.PUT("/aviation/:id", handle.PutAviation) // Добавляем PUT маршрут
 	router.DELETE("/aviation/:id", handle.DeleteAviationByID)
-
+	router.GET("/flights", handle.GetAllFlights)
+	router.GET("/flights/:id", handle.GetFlightsByID)
+	router.GET("/flights/stats/:plane_id", handle.GetPlaneStatsByID)
 	return router
 }
